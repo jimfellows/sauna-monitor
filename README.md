@@ -53,7 +53,7 @@ directly to the cloud.
 
 To spin up a local CouchDB in [Docker](https://hub.docker.com/_/couchdb):
 
-`docker run -d --name couch -p 5984:5984 -e COUCHDB_USER=admin -e COUCHDB_PASSWORD=password couchdb:latest`
+`docker run -d --name couchdb -p 5984:5984 -e COUCHDB_USER=admin -e COUCHDB_PASSWORD=admin -v /usr/share/couchdb/data:/opt/couchdb/data --restart unless-stopped couchdb:latest`
 
 ## PWA
 Coming soon
