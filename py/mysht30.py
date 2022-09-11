@@ -7,7 +7,7 @@ DEFAULT_I2C_ADDRESS = 0x45
 
 class MySht30:
     """
-    Based on class written by Roberto S璋﹏chez, see https://github.com/rsc1975/micropython-sht30/blob/master/sht30.py
+    Based on class written by Roberto S鐠嬶箯chez, see https://github.com/rsc1975/micropython-sht30/blob/master/sht30.py
     SHT30 sensor driver in pure python based on I2C bus
 
    References:
