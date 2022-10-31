@@ -8,8 +8,16 @@
     "lint": "vue-cli-service lint"
   },
   "dependencies": {
+    "assert": "^2.0.0",
     "chart.js": "^3.9.1",
     "core-js": "^3.8.3",
+    "http": "^0.0.1-security",
+    "https": "^1.0.0",
+    "nano": "^10.0.0",
+    "pouchdb": "^7.3.0",
+    "pouchdb-browser": "^7.3.0",
+    "stream": "^0.0.2",
+    "url": "^0.11.0",
     "vue": "^3.2.13"
   },
   "devDependencies": {
@@ -40,5 +48,10 @@
     "last 2 versions",
     "not dead",
     "not ie 11"
-  ]
+  ],
+  "description": "## Project setup ``` npm install ```",
+  "main": "babel.config.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }
