@@ -24,22 +24,37 @@ export default {
     const temps = [];
     const hums = [];
     const xaxis = [];
+    let lastDoc;
+    const getLast = function () {
+      sensorData
+        .query("basicQueries/saunaReadings", {
+          descending: true,
+          limit: 1,
+        })
+        .then(function (doc) {
+          lastDoc = doc.rows[0];
+        });
+    };
     const getData = function () {
       console.info("Getting data");
-      sensorData.query("basicQueries/todaysSaunaReadings").then(function (doc) {
-        for (const r of doc.rows) {
-          temps.push(r.value.tempF);
-          hums.push(r.value.humidity);
-          xaxis.push(r.value.dt);
-        }
-      });
+      sensorData
+        .query("basicQueries/dailySaunaReadings", { key: "2022-11-11" })
+        .then(function (doc) {
+          for (const r of doc.rows) {
+            temps.push(r.value.tempF);
+            hums.push(r.value.humidity);
+            xaxis.push(r.value.dt);
+          }
+        });
     };
     getData();
+    getLast();
+
     Promise.resolve(temps);
     Promise.resolve(hums);
     Promise.resolve(xaxis);
-    console.info(hums);
-    // console.info(data);
+    Promise.resolve(lastDoc);
+    // hello = lastDoc.dt;
     const ctx = document.getElementById("myChart");
     const myChart = new Chart(ctx, {
       type: "line",

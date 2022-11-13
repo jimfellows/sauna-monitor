@@ -5,11 +5,13 @@
 
 <script>
 import LineChart from "./components/LineChart.vue";
+// import KPI from "./components/KPI.vue";
 
 export default {
   name: "App",
   components: {
     LineChart,
+    // KPI,
   },
 };
 </script>
