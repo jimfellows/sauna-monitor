@@ -1,109 +1,117 @@
-# This file is executed on every boot (including wake-boot from deepsleep)
-
-# import esp
-from mysht30 import MySht30
-from machine import Pin, unique_id, deepsleep
-import time
 import network
+import time
+from machine import reset, Pin, RTC
+from utils import (
+    connect_to_wifi,
+    set_rtc_from_internet,
+    get_iso_datestr_from_rtc,
+    blink_led,
+    start_over
+)
+from config import (
+    WIFIS_TO_TRY,
+    WIFI_PW,
+    WIFI_CONN_TIMEOUT_MS,
+    COUCH_USER,
+    COUCH_PW
+)
+
+from mysht30 import MySht30
 import auth_urequests as urequests
-import os
 
-print("ESP32 booted, starting script")
+EMBEDDED_LED = Pin(2, Pin.OUT)
+PENDING_LED = Pin(18, Pin.OUT)
+SUCCESS_LED = Pin(19, Pin.OUT)
+ERROR_LED = Pin(21, Pin.OUT)
 
-# set up leds to flash based on whats happening
-embedded_led = Pin(2, Pin.OUT)
-pending_led = Pin(18, Pin.OUT)
-success_led = Pin(19, Pin.OUT)
-error_led = Pin(21, Pin.OUT)
-
-# initial blinks so we know we're starting
-start_blinks = 0
-while start_blinks < 3:
-    embedded_led.on()
-    time.sleep(0.1)
-    embedded_led.off()
-    time.sleep(0.1)
-    start_blinks += 1
-
-pending_led.value(1)
-time.sleep(2)
-
-# start big try/except statement
+"""
+Start by creating network station obj and trying to connect.
+Stay in loop until we've connected
+"""
 try:
-    # start connection to wifi attempt
-    station = network.WLAN(network.STA_IF)
-    station.active(True)
+    print(f"Starting boot script...")
 
-    if not station.isconnected():
-        print("Connecting to WiFi")
-        station.connect("MYWIFI", "MYWIFIPW")
-        conn_timeout_ms = 10000
-        conn_start_time = time.ticks_ms()
-        while not station.isconnected():
-            now = time.ticks_ms()
-            duration = now - conn_start_time
-            if duration > conn_timeout_ms:
-                raise Exception('Unable to connect to WIFI')
-    
-    print("Connected to WiFi! Continuing with script")
-                
-    # get datetime from API, rather than mess with RTC
-    print("Getting datetime from API")
-    dt_response = urequests.get("http://worldtimeapi.org/api/timezone/America/Los_Angeles")
-    time.sleep(1)
-    dt = dt_response.json()['datetime']
-    print(f"Datetime: {dt}")
+    # turn on yellow led as we process
+    PENDING_LED.value(1)
+    time.sleep(2)
 
-    # start temp sensor stuff
-    print("Taking measurement with sensor")
+    # start by creating network station obj
+    clock = RTC()
+    wifi_station = network.WLAN(network.STA_IF)
+    if wifi_station.active():
+        wifi_station.active(False)
+        time.sleep(3)
+    wifi_station.active(True)
+
+    # if not connected, attempt to connect
+    ms_to_connect = 0
+    active_wifi = ''
+    if not wifi_station.isconnected():
+        for wifi in WIFIS_TO_TRY:  # wifi network options to attempt conn
+            print(f"Trying to connect to WIFI {wifi}...")
+            success, ms_to_connect = connect_to_wifi(wifi, WIFI_PW, wifi_station, timeout_ms=WIFI_CONN_TIMEOUT_MS)
+            if success:  # break out if we connect successfully
+                active_wifi = wifi
+                print(f"Connected to WIFI {wifi} after {ms_to_connect}ms!")
+                break
+            else:
+                print(f"Unable to connect to WIFI {wifi} after {ms_to_connect}ms")
+
+        # if we can't connect, sleep then reset to retry
+        if not wifi_station.isconnected():
+            raise Exception('Unable to connect to wifi')
+            # start_over(120)
+
+        else:
+            print(f"Connected to WIFI {active_wifi} after {ms_to_connect}ms!")
+
+        # start processes that require internet
+        # while wifi_station.isconnected():
+    if clock.datetime()[0] < 2022:  # indicates RTC has not yet been set
+        print(f"Trying to set RTC clock with world time API call")
+        set_rtc_from_internet(clock)
+    else:
+        print(f"RTC clock already set, current time = {clock.datetime()}")
+
     sensor = MySht30()
     sensor.measure_int()  # take measurement, sets _current_data
-    device_info = os.uname()
+    print(f"Sensor measurement recorded: temp: {sensor.current_temp_f}, hum: {sensor.current_humidity}")
 
     data = {
         'tempF': sensor.current_temp_f,
         'humRel': sensor.current_humidity,
-        'dt': dt,
+        'dt': get_iso_datestr_from_rtc(clock),
         'loc': 'sauna',
-        'deviceModel': device_info.sysname,
-        'deviceId': str(unique_id()),
-        'deviceRelease': device_info.release,
+        'timeToWifiConnMs': ms_to_connect,
+        'wifi': active_wifi
     }
-    
-    print(f"Data retrieved, sending to couch")
-    print(data)
-    print("Posting to couch")
-    # send off to couch
-    doc_post = urequests.post('http://192.168.1.101:5984/home-sensors', json=data, auth=["COUCHUSER", "COUCHPW"])
+
+    doc_post = urequests.post('http://192.168.1.101:5984/home-sensors', json=data, auth=[COUCH_USER, COUCH_PW])
+    PENDING_LED.value(0)
     if doc_post.status_code in [201, 200]:
-        print("Doc successfully posted!")
-        success_led.value(1)
-        pending_led.value(0)
-        time.sleep(3)
-        
+        print(f"Success! doc posted to CouchDB")
+        SUCCESS_LED.value(1)
     else:
-        print(f"Error posting, status code {doc_post.status_code}")
-        error_led.value(1)
-        time.sleep(3)
+        print(f"Unable to post doc, response code: {doc_post.status_code}")
+        ERROR_LED.value(1)
+
+    # sleep for a bit just to display either success or error led
+    time.sleep(5)
 
 except Exception as e:
-    pending_led.value(0)
-    error_blinks = 0
-    print(str(e))
-    while error_blinks < 10:
-        error_led.value(1)
-        time.sleep(0.2)
-        error_led.value(0)
-        time.sleep(0.2)
-        error_blinks += 1
-    if station.isconnected():
-      urequests.post('http://192.168.1.101:5984/home-sensors', json={'exc': str(e)}, auth=["admin", "admin"])
-
+    time.sleep(2)
+    print(f"Error during script: {e}")
+    time.sleep(2)
+    PENDING_LED.value(0)
+    ERROR_LED.value(1)
+    time.sleep(10)
 finally:
-    embedded_led.off()
-    pending_led.value(0)
-    success_led.value(0)
-    error_led.value(0)
+    EMBEDDED_LED.off()
+    PENDING_LED.value(0)
+    SUCCESS_LED.value(0)
+    ERROR_LED.value(0)
 
-    deepsleep(150000)
+    # keeps the script on and start reboot
+    start_over(120)
+
 
