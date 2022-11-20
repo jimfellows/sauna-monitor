@@ -37,6 +37,7 @@ try:
 
     # start by creating network station obj
     clock = RTC()
+    sensor = MySht30()
     wifi_station = network.WLAN(network.STA_IF)
     if wifi_station.active():
         wifi_station.active(False)
@@ -56,47 +57,49 @@ try:
                 break
             else:
                 print(f"Unable to connect to WIFI {wifi} after {ms_to_connect}ms")
+                time.sleep(1)
 
         # if we can't connect, sleep then reset to retry
         if not wifi_station.isconnected():
             raise Exception('Unable to connect to wifi')
-            # start_over(120)
-
         else:
             print(f"Connected to WIFI {active_wifi} after {ms_to_connect}ms!")
 
         # start processes that require internet
-        # while wifi_station.isconnected():
-    if clock.datetime()[0] < 2022:  # indicates RTC has not yet been set
-        print(f"Trying to set RTC clock with world time API call")
-        set_rtc_from_internet(clock)
-    else:
-        print(f"RTC clock already set, current time = {clock.datetime()}")
+        while wifi_station.isconnected():
+            if clock.datetime()[0] < 2022:  # indicates RTC has not yet been set
+                print(f"Trying to set RTC clock with world time API call")
+                set_rtc_from_internet(clock)
+            else:
+                print(f"RTC clock already set, current time = {clock.datetime()}")
 
-    sensor = MySht30()
-    sensor.measure_int()  # take measurement, sets _current_data
-    print(f"Sensor measurement recorded: temp: {sensor.current_temp_f}, hum: {sensor.current_humidity}")
+            sensor.measure_int()  # take measurement, sets _current_data
+            print(f"Sensor measurement recorded: temp: {sensor.current_temp_f}, hum: {sensor.current_humidity}")
 
-    data = {
-        'tempF': sensor.current_temp_f,
-        'humRel': sensor.current_humidity,
-        'dt': get_iso_datestr_from_rtc(clock),
-        'loc': 'sauna',
-        'timeToWifiConnMs': ms_to_connect,
-        'wifi': active_wifi
-    }
+            data = {
+                'tempF': sensor.current_temp_f,
+                'humRel': sensor.current_humidity,
+                'dt': get_iso_datestr_from_rtc(clock),
+                'loc': 'sauna',
+                'timeToWifiConnMs': ms_to_connect,
+                'wifi': active_wifi
+            }
 
-    doc_post = urequests.post('http://192.168.1.101:5984/home-sensors', json=data, auth=[COUCH_USER, COUCH_PW])
-    PENDING_LED.value(0)
-    if doc_post.status_code in [201, 200]:
-        print(f"Success! doc posted to CouchDB")
-        SUCCESS_LED.value(1)
-    else:
-        print(f"Unable to post doc, response code: {doc_post.status_code}")
-        ERROR_LED.value(1)
+            doc_post = urequests.post('http://192.168.1.101:5984/home-sensors', json=data, auth=[COUCH_USER, COUCH_PW])
+            PENDING_LED.value(0)
 
-    # sleep for a bit just to display either success or error led
-    time.sleep(5)
+            if doc_post.status_code in [201, 200]:
+                print(f"Success! doc posted to CouchDB")
+                SUCCESS_LED.value(1)
+            else:
+                print(f"Unable to post doc, response code: {doc_post.status_code}")
+                ERROR_LED.value(1)
+
+            time.sleep(5)  # sleep for a bit just to display either success or error led
+            ERROR_LED.value(0)
+            SUCCESS_LED.value(0)
+            print("Sleepig while still connected...")
+            time.sleep(120)  # attempt re-measure every n seconds
 
 except Exception as e:
     time.sleep(2)
