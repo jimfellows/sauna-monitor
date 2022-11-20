@@ -9,7 +9,7 @@ main.js
 /py/workSpace
 
 # dependencies
-/node_modules
+/vue/saunamonitor/node_modules
 
 # IDEs and editors
 /.idea
